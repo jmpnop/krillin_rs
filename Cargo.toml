@@ -1,14 +1,14 @@
 [package]
-name = "krillin_rs"
+name = "vdub"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "krillin"
+name = "vdub"
 path = "src/bin/cli.rs"
 
 [[bin]]
-name = "krillind"
+name = "vdubd"
 path = "src/bin/server.rs"
 
 [dependencies]

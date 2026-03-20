@@ -1,10 +1,10 @@
-use krillin_rs::config::Config;
-use krillin_rs::router::build_router;
-use krillin_rs::service::Service;
-use krillin_rs::storage::task_store::TaskStore;
-use krillin_rs::storage::BinPaths;
-use krillin_rs::util::cli_art;
-use krillin_rs::AppState;
+use vdub::config::Config;
+use vdub::router::build_router;
+use vdub::service::Service;
+use vdub::storage::task_store::TaskStore;
+use vdub::storage::BinPaths;
+use vdub::util::cli_art;
+use vdub::AppState;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
     let addr = format!("{}:{}", config.server.host, config.server.port);
 
-    let venv_bin = krillin_rs::util::deps::ensure_dependencies(&config).await?;
+    let venv_bin = vdub::util::deps::ensure_dependencies(&config).await?;
     let bin_paths = BinPaths::detect_with_venv(venv_bin.as_deref());
 
     for w in &bin_paths.validate() {

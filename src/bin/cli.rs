@@ -1,14 +1,14 @@
 use clap::Parser;
-use krillin_rs::config::{Config, TtsProvider};
-use krillin_rs::service::Service;
-use krillin_rs::storage::BinPaths;
-use krillin_rs::types::task::{EmbedVideoType, StepParam, SubtitleResultType};
-use krillin_rs::util::cli_art;
+use vdub::config::{Config, TtsProvider};
+use vdub::service::Service;
+use vdub::storage::BinPaths;
+use vdub::types::task::{EmbedVideoType, StepParam, SubtitleResultType};
+use vdub::util::cli_art;
 use tracing_subscriber::EnvFilter;
 
-/// KrillinAI — dub any video from the command line
+/// vdub — dub any video from the command line
 #[derive(Parser)]
-#[command(name = "krillin")]
+#[command(name = "vdub")]
 struct Cli {
     /// YouTube URL or local file path
     url: String,
@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     cli_art::print_dragon();
 
     let config = Config::load()?;
-    let venv_bin = krillin_rs::util::deps::ensure_dependencies(&config).await?;
+    let venv_bin = vdub::util::deps::ensure_dependencies(&config).await?;
     let bins = BinPaths::detect_with_venv(venv_bin.as_deref());
 
     for w in &bins.validate() {
@@ -101,7 +101,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let voice = cli.voice.as_deref().unwrap_or(default_voice);
 
-    let task_id = format!("cli_{}", &uuid::Uuid::new_v4().to_string()[..8]);
+    let task_id = format!("vdub_{}", &uuid::Uuid::new_v4().to_string()[..8]);
     let task_base_path = format!("./tasks/{task_id}");
     tokio::fs::create_dir_all(format!("{task_base_path}/output")).await?;
 
@@ -136,25 +136,25 @@ async fn main() -> anyhow::Result<()> {
 
     // Run pipeline
     cli_art::step_download_start(&param.link);
-    krillin_rs::service::link_to_file::link_to_file(&bins, &mut param, &config.app.proxy).await?;
+    vdub::service::link_to_file::link_to_file(&bins, &mut param, &config.app.proxy).await?;
     cli_art::step_download_done();
 
     cli_art::step_transcribe_start(config.transcribe.provider.as_str(), &param.origin_language);
-    krillin_rs::service::audio_to_subtitle::audio_to_subtitle(
+    vdub::service::audio_to_subtitle::audio_to_subtitle(
         &bins, &config, &service.transcriber, &service.chat_completer, &mut param,
     ).await?;
 
     if param.enable_tts {
         cli_art::step_tts_start(config.tts.provider.as_str(), &param.tts_voice_code);
-        krillin_rs::service::srt_to_speech::srt_to_speech(
+        vdub::service::srt_to_speech::srt_to_speech(
             &bins, &config, &service.tts_client, &mut param,
         ).await?;
     }
 
-    krillin_rs::service::srt_embed::embed_subtitles(&bins, &mut param).await?;
+    vdub::service::srt_embed::embed_subtitles(&bins, &mut param).await?;
 
     cli_art::step_finalize_start();
-    krillin_rs::service::upload_subtitles::upload_subtitles(&mut param).await?;
+    vdub::service::upload_subtitles::upload_subtitles(&mut param).await?;
     cli_art::step_finalize_done(param.subtitle_infos.len());
     cli_art::pipeline_success(&task_id);
 

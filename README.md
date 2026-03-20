@@ -1,4 +1,4 @@
-# KrillinAI
+# vdub
 
 Video dubbing and subtitle engine written in Rust. Automatically transcribes, translates, and dubs videos with support for fully on-device processing on Apple Silicon via MLX. All ASR and TTS providers are free and local.
 
@@ -12,7 +12,7 @@ Video dubbing and subtitle engine written in Rust. Automatically transcribes, tr
 - **Free TTS backends**: Edge TTS, MLX Audio (Kokoro)
 - **Any OpenAI-compatible LLM**: OpenAI, DeepSeek, local `mlx_lm.server`
 - **On-device Apple Silicon**: MLX Whisper + MLX Audio + local LLM = zero cloud dependencies
-- **Two binaries**: `krillin` (CLI) and `krillind` (web server)
+- **Two binaries**: `vdub` (CLI) and `vdubd` (web server)
 
 ## Requirements
 
@@ -25,8 +25,8 @@ All other dependencies (ffmpeg, yt-dlp, ASR/TTS backends) are **automatically in
 
 ```bash
 # Build
-git clone https://github.com/jmpnop/krillin_rs.git
-cd krillin_rs
+git clone https://github.com/jmpnop/vdub.git
+cd vdub
 cargo build --release
 
 # Set up config
@@ -38,19 +38,19 @@ cp config/config-example.toml config/config.toml
 
 ```bash
 # Just a URL — auto-detects language, dubs, embeds subtitles
-krillin https://youtube.com/watch?v=VIDEO_ID
+vdub https://youtube.com/watch?v=VIDEO_ID
 
 # Specify languages
-krillin https://youtube.com/watch?v=VIDEO_ID --from en --to ru
+vdub https://youtube.com/watch?v=VIDEO_ID --from en --to ru
 
 # Subtitles only, no dubbing
-krillin https://youtube.com/watch?v=VIDEO_ID --no-tts
+vdub https://youtube.com/watch?v=VIDEO_ID --no-tts
 
 # Local file
-krillin local:./my_video.mp4
+vdub local:./my_video.mp4
 
 # All options
-krillin https://youtube.com/watch?v=VIDEO_ID \
+vdub https://youtube.com/watch?v=VIDEO_ID \
   --from en --to ru \
   --voice en-US-GuyNeural \
   --no-bilingual \
@@ -74,7 +74,7 @@ krillin https://youtube.com/watch?v=VIDEO_ID \
 ### Web server
 
 ```bash
-krillind
+vdubd
 ```
 
 Open `http://127.0.0.1:8888` in your browser.
@@ -120,7 +120,7 @@ provider = "mlx-whisper"
 provider = "mlx-audio"
 ```
 
-## API (krillind)
+## API (vdubd)
 
 The server accepts JSON, form-urlencoded, or just a `?url=` query param:
 
@@ -168,7 +168,7 @@ Any OpenAI-compatible API. Point `llm.base_url` at your provider.
 
 ```
 src/
-  bin/          # krillin (CLI) and krillind (web server)
+  bin/          # vdub (CLI) and vdubd (web server)
   config/       # TOML config with provider enums
   dto/          # API request/response types
   handler/      # Axum HTTP handlers
