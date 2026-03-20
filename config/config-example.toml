@@ -71,7 +71,7 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
 # 1. Install MLX tools:
-#    pip install mlx-whisper mlx-audio mlx-lm
+#    uv pip install mlx-lm   # ASR + TTS are auto-installed by krillin_rs
 #
 # 2. Start local LLM server:
 #    mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080

@@ -18,10 +18,9 @@ Video dubbing and subtitle engine written in Rust. Automatically transcribes, tr
 ## Requirements
 
 - Rust 1.75+
-- ffmpeg / ffprobe
-- yt-dlp (for URL downloads)
-- One ASR backend installed (faster-whisper, whisper.cpp, WhisperKit, or mlx-whisper)
-- One TTS backend installed (edge-tts or mlx-audio)
+- macOS with Homebrew (dependencies are auto-installed on first run)
+
+All other dependencies (ffmpeg, yt-dlp, ASR/TTS backends) are **automatically installed** on startup based on your config. Python packages are managed via [uv](https://docs.astral.sh/uv/) in an isolated venv at `./venv/`.
 
 ## Quick Start
 
@@ -35,19 +34,33 @@ cargo build --release
 cp config/config-example.toml config/config.toml
 # Edit config/config.toml — defaults to faster-whisper + edge-tts
 
-# Run
+# Run — dependencies are installed automatically
 ./target/release/krillin_rs
 ```
 
 Open `http://127.0.0.1:8888` in your browser.
+
+### What gets installed automatically
+
+| Tool | Install method | When |
+|------|---------------|------|
+| uv | curl installer | Always (Python package manager) |
+| ffmpeg / ffprobe | Homebrew | Always |
+| yt-dlp | Homebrew | Always |
+| faster-whisper | uv (venv) | When `transcribe.provider = "fasterwhisper"` |
+| whisper.cpp | Homebrew | When `transcribe.provider = "whispercpp"` |
+| WhisperKit | Homebrew | When `transcribe.provider = "whisperkit"` |
+| mlx-whisper | uv (venv) | When `transcribe.provider = "mlx-whisper"` |
+| edge-tts | uv (venv) | When `transcribe.provider = "edge-tts"` |
+| mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"` |
 
 ## Apple Silicon (fully local)
 
 Run the entire pipeline on-device with zero cloud dependencies:
 
 ```bash
-# Install MLX tools
-pip install mlx-whisper mlx-audio mlx-lm
+# Install mlx-lm for local LLM server (ASR + TTS are auto-installed)
+uv pip install mlx-lm
 
 # Start local LLM
 mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080
@@ -141,7 +154,7 @@ src/
   service/      # Pipeline steps (split, transcribe, translate, TTS, embed)
   storage/      # Task store, binary path detection
   types/        # Subtitles, ASS headers, prompts, language maps
-  util/         # ffmpeg/ffprobe wrappers, text processing, CLI art
+  util/         # ffmpeg/ffprobe wrappers, dependency management, CLI art
 static/         # Embedded web UI
 config/         # Example configuration
 ```

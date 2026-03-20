@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
     let addr = format!("{}:{}", config.server.host, config.server.port);
 
-    // Ensure all dependencies are installed (Homebrew + pip packages)
+    // Ensure all dependencies are installed (Homebrew + uv packages)
     let venv_bin = krillin_rs::util::deps::ensure_dependencies(&config).await?;
 
     // Detect external tool paths (checks venv/bin first, then ./bin/, then PATH)
