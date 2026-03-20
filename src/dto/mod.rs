@@ -63,15 +63,15 @@ pub struct StartTaskRequest {
     pub origin_language: String,
     #[serde(default)]
     pub target_lang: String,
-    #[serde(default)]
+    #[serde(default = "default_one")]
     pub bilingual: u8,
-    #[serde(default)]
+    #[serde(default = "default_two")]
     pub translation_subtitle_pos: u8,
     #[serde(default)]
     pub modal_filter: u8,
-    #[serde(default)]
+    #[serde(default = "default_one")]
     pub tts: u8,
-    #[serde(default)]
+    #[serde(default = "default_tts_voice")]
     pub tts_voice_code: String,
     #[serde(default)]
     pub tts_voice_clone_src_file_url: String,
@@ -79,7 +79,7 @@ pub struct StartTaskRequest {
     pub replace: Vec<String>,
     #[serde(default)]
     pub language: String,
-    #[serde(default)]
+    #[serde(default = "default_embed_type")]
     pub embed_subtitle_video_type: String,
     #[serde(default)]
     pub vertical_major_title: String,
@@ -93,6 +93,10 @@ pub struct StartTaskRequest {
 }
 
 fn default_true() -> bool { true }
+fn default_one() -> u8 { 1 }
+fn default_two() -> u8 { 2 }
+fn default_tts_voice() -> String { "en-US-AriaNeural".to_string() }
+fn default_embed_type() -> String { "horizontal".to_string() }
 
 #[derive(Debug, Serialize)]
 pub struct StartTaskResponse {
