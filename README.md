@@ -12,8 +12,7 @@ Video dubbing and subtitle engine written in Rust. Automatically transcribes, tr
 - **Free TTS backends**: Edge TTS, MLX Audio (Kokoro)
 - **Any OpenAI-compatible LLM**: OpenAI, DeepSeek, local `mlx_lm.server`
 - **On-device Apple Silicon**: MLX Whisper + MLX Audio + local LLM = zero cloud dependencies
-- **Web UI**: Built-in browser interface at `http://localhost:8888`
-- **Hot-reloadable config**: Update settings via API without restarting
+- **Two binaries**: `krillin` (CLI) and `krillind` (web server)
 
 ## Requirements
 
@@ -25,17 +24,57 @@ All other dependencies (ffmpeg, yt-dlp, ASR/TTS backends) are **automatically in
 ## Quick Start
 
 ```bash
-# Clone and build
+# Build
 git clone https://github.com/jmpnop/krillin_rs.git
 cd krillin_rs
 cargo build --release
 
-# Copy and edit config
+# Set up config
 cp config/config-example.toml config/config.toml
-# Edit config/config.toml — defaults to faster-whisper + edge-tts
+# Edit config/config.toml — set your LLM API key
+```
 
-# Run — dependencies are installed automatically
-./target/release/krillin_rs
+### CLI — dub a video in one command
+
+```bash
+# Just a URL — auto-detects language, dubs, embeds subtitles
+krillin https://youtube.com/watch?v=VIDEO_ID
+
+# Specify languages
+krillin https://youtube.com/watch?v=VIDEO_ID --from en --to ru
+
+# Subtitles only, no dubbing
+krillin https://youtube.com/watch?v=VIDEO_ID --no-tts
+
+# Local file
+krillin local:./my_video.mp4
+
+# All options
+krillin https://youtube.com/watch?v=VIDEO_ID \
+  --from en --to ru \
+  --voice en-US-GuyNeural \
+  --no-bilingual \
+  --replace-audio \
+  --vertical
+```
+
+#### CLI flags
+
+| Flag | Description |
+|------|-------------|
+| `--from`, `-f` | Source language (auto-detected if omitted) |
+| `--to`, `-t` | Target language (auto-selected EN↔RU if omitted) |
+| `--no-tts` | Subtitles only, skip dubbing |
+| `--no-embed` | Skip subtitle embedding into video |
+| `--voice` | TTS voice (default: `en-US-AriaNeural` / `af_heart`) |
+| `--no-bilingual` | Target language subtitles only |
+| `--replace-audio` | Replace original audio instead of adding second track |
+| `--vertical` | Also generate vertical (9:16) video |
+
+### Web server
+
+```bash
+krillind
 ```
 
 Open `http://127.0.0.1:8888` in your browser.
@@ -51,7 +90,7 @@ Open `http://127.0.0.1:8888` in your browser.
 | whisper.cpp | Homebrew | When `transcribe.provider = "whispercpp"` |
 | WhisperKit | Homebrew | When `transcribe.provider = "whisperkit"` |
 | mlx-whisper | uv (venv) | When `transcribe.provider = "mlx-whisper"` |
-| edge-tts | uv (venv) | When `transcribe.provider = "edge-tts"` |
+| edge-tts | uv (venv) | When `tts.provider = "edge-tts"` |
 | mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"` |
 
 ## Apple Silicon (fully local)
@@ -81,7 +120,22 @@ provider = "mlx-whisper"
 provider = "mlx-audio"
 ```
 
-## API
+## API (krillind)
+
+The server accepts JSON, form-urlencoded, or just a `?url=` query param:
+
+```bash
+# Simplest — just a URL
+curl -d "url=https://youtube.com/watch?v=..." localhost:8888/api/capability/subtitleTask
+
+# Or as query param
+curl "localhost:8888/api/capability/subtitleTask?url=https://youtube.com/watch?v=..."
+
+# Full JSON (all fields optional except url)
+curl localhost:8888/api/capability/subtitleTask \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://youtube.com/watch?v=..."}'
+```
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -89,37 +143,7 @@ provider = "mlx-audio"
 | `/api/capability/subtitleTask?taskId=...` | GET | Get task status |
 | `/api/file` | POST | Upload a file |
 | `/api/file/*` | GET | Download output files |
-| `/api/config` | GET | Get current config |
-| `/api/config` | POST | Update config (hot-reload) |
-
-### Start a task
-
-```json
-POST /api/capability/subtitleTask
-{
-  "url": "https://youtube.com/watch?v=...",
-  "origin_language": "",
-  "target_lang": "",
-  "bilingual": 1,
-  "translation_subtitle_pos": 2,
-  "tts": 1,
-  "tts_voice_code": "en-US-AriaNeural",
-  "embed_subtitle_video_type": "horizontal",
-  "multi_track": true
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `url` | string | YouTube URL or path to local video |
-| `origin_language` | string | Source language code, empty for auto-detect |
-| `target_lang` | string | Target language code, empty for auto-select (EN↔RU) |
-| `bilingual` | 0/1 | Show both languages in subtitles |
-| `translation_subtitle_pos` | 1/2 | Translation on top (1) or bottom (2) |
-| `tts` | 0/1 | Enable text-to-speech dubbing |
-| `tts_voice_code` | string | Voice ID (e.g. `en-US-AriaNeural` for Edge TTS, `af_heart` for MLX Audio) |
-| `embed_subtitle_video_type` | string | `horizontal`, `vertical`, `all`, or empty to skip |
-| `multi_track` | bool | Add dubbed audio as second track (true) or replace original (false) |
+| `/api/config` | GET/POST | View or update config (hot-reload) |
 
 ## Providers
 
@@ -144,6 +168,7 @@ Any OpenAI-compatible API. Point `llm.base_url` at your provider.
 
 ```
 src/
+  bin/          # krillin (CLI) and krillind (web server)
   config/       # TOML config with provider enums
   dto/          # API request/response types
   handler/      # Axum HTTP handlers

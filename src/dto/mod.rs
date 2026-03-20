@@ -55,7 +55,7 @@ impl<T: Serialize> IntoResponse for ApiResponse<T> {
 
 // --- Subtitle Task DTOs ---
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct StartTaskRequest {
     #[serde(default)]
     pub url: String,

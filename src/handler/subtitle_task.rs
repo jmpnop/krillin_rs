@@ -6,15 +6,51 @@ use crate::types::task::{EmbedVideoType, SubtitleResultType, SubtitleTask};
 use crate::util::cli_art;
 use crate::AppState;
 use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
-use axum::Json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Accepts JSON, form-urlencoded, or just `?url=...` query param.
+/// All fields except `url` have sensible defaults.
 pub async fn start_task(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<StartTaskRequest>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    // Parse request from whatever format was sent
+    let req: StartTaskRequest = if body.is_empty() {
+        // No body — use query params (curl "localhost:8888/...?url=https://...")
+        if let Some(url) = query.get("url") {
+            StartTaskRequest { url: url.clone(), ..Default::default() }
+        } else {
+            return ApiResponse::<()>::error("Missing url parameter").into_response();
+        }
+    } else {
+        let ct = headers.get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("application/json") {
+            match serde_json::from_slice(&body) {
+                Ok(r) => r,
+                Err(e) => return ApiResponse::<()>::error(&format!("Invalid JSON: {e}")).into_response(),
+            }
+        } else {
+            // Try form-urlencoded first (curl -d "url=..."), then JSON as fallback
+            serde_urlencoded::from_bytes(&body)
+                .or_else(|_| serde_json::from_slice(&body))
+                .unwrap_or_else(|_| {
+                    // Last resort: treat entire body as the URL
+                    let url = String::from_utf8_lossy(&body).trim().to_string();
+                    StartTaskRequest { url, ..Default::default() }
+                })
+        }
+    };
+
+    if req.url.is_empty() {
+        return ApiResponse::<()>::error("Missing url parameter").into_response();
+    }
     // Generate task ID
     let task_id = format!(
         "{}_{}",
