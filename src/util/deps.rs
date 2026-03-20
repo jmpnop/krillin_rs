@@ -1,7 +1,8 @@
 //! Dependency management — auto-detect and install required tools
 //!
+//! Uses `uv` for Python package management (installed automatically if missing).
 //! Homebrew tools: ffmpeg, yt-dlp, whisper-cpp, whisperkit-cli
-//! Python venv tools: faster-whisper, mlx-whisper, edge-tts, mlx-audio, mlx-lm
+//! Python (uv) tools: faster-whisper, mlx-whisper, edge-tts, mlx-audio
 
 use crate::config::{Config, TranscribeProvider, TtsProvider};
 use std::path::{Path, PathBuf};
@@ -19,12 +20,12 @@ struct Dep {
 
 enum DepKind {
     Brew(&'static str),      // brew formula name
-    Pip(&'static str),       // pip package name
+    Uv(&'static str),        // uv pip package name
 }
 
 enum Check {
     Binary(&'static str),    // check `which <binary>`
-    PipPkg(&'static str),    // check `pip show <pkg>` in venv
+    UvPkg(&'static str),     // check `uv pip show <pkg>` in venv
 }
 
 /// Ensure all dependencies for the current config are installed.
@@ -49,8 +50,8 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
         TranscribeProvider::Fasterwhisper => {
             deps.push(Dep {
                 name: "faster-whisper",
-                kind: DepKind::Pip("faster-whisper"),
-                check: Check::PipPkg("faster-whisper"),
+                kind: DepKind::Uv("faster-whisper"),
+                check: Check::UvPkg("faster-whisper"),
             });
         }
         TranscribeProvider::Whispercpp => {
@@ -70,8 +71,8 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
         TranscribeProvider::MlxWhisper => {
             deps.push(Dep {
                 name: "mlx-whisper",
-                kind: DepKind::Pip("mlx-whisper"),
-                check: Check::PipPkg("mlx-whisper"),
+                kind: DepKind::Uv("mlx-whisper"),
+                check: Check::UvPkg("mlx-whisper"),
             });
         }
     }
@@ -81,33 +82,32 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
         TtsProvider::EdgeTts => {
             deps.push(Dep {
                 name: "edge-tts",
-                kind: DepKind::Pip("edge-tts"),
-                check: Check::PipPkg("edge-tts"),
+                kind: DepKind::Uv("edge-tts"),
+                check: Check::UvPkg("edge-tts"),
             });
         }
         TtsProvider::MlxAudio => {
             deps.push(Dep {
                 name: "mlx-audio",
-                kind: DepKind::Pip("mlx-audio"),
-                check: Check::PipPkg("mlx-audio"),
+                kind: DepKind::Uv("mlx-audio"),
+                check: Check::UvPkg("mlx-audio"),
             });
         }
     }
 
     // Check which deps are missing
-    let needs_venv = deps.iter().any(|d| matches!(d.kind, DepKind::Pip(_)));
+    let needs_venv = deps.iter().any(|d| matches!(d.kind, DepKind::Uv(_)));
     let venv_bin = PathBuf::from(VENV_DIR).join("bin");
-    let pip_path = venv_bin.join("pip");
 
     let mut missing_brew: Vec<&Dep> = Vec::new();
-    let mut missing_pip: Vec<&Dep> = Vec::new();
+    let mut missing_uv: Vec<&Dep> = Vec::new();
 
     for dep in &deps {
         let installed = match &dep.check {
             Check::Binary(bin) => is_binary_available(bin).await,
-            Check::PipPkg(pkg) => {
+            Check::UvPkg(pkg) => {
                 if venv_bin.exists() {
-                    is_pip_installed(&pip_path, pkg).await
+                    is_uv_pkg_installed(pkg, VENV_DIR).await
                 } else {
                     false
                 }
@@ -119,12 +119,12 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
         } else {
             match &dep.kind {
                 DepKind::Brew(_) => missing_brew.push(dep),
-                DepKind::Pip(_) => missing_pip.push(dep),
+                DepKind::Uv(_) => missing_uv.push(dep),
             }
         }
     }
 
-    if missing_brew.is_empty() && missing_pip.is_empty() {
+    if missing_brew.is_empty() && missing_uv.is_empty() {
         tracing::info!("   📦 All dependencies satisfied");
         if needs_venv && venv_bin.exists() {
             return Ok(Some(venv_bin));
@@ -154,13 +154,16 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
         }
     }
 
-    // Install missing pip packages
-    if !missing_pip.is_empty() {
+    // Install missing Python packages via uv
+    if !missing_uv.is_empty() {
+        // Ensure uv is available
+        ensure_uv().await?;
+
         // Ensure venv exists
         if !Path::new(VENV_DIR).exists() {
             tracing::info!("   🐍 Creating Python virtual environment at {VENV_DIR}/...");
-            let output = tokio::process::Command::new("python3")
-                .args(["-m", "venv", VENV_DIR])
+            let output = tokio::process::Command::new("uv")
+                .args(["venv", VENV_DIR])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
@@ -172,30 +175,22 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
             tracing::info!("   ✅ Virtual environment created");
         }
 
-        // Upgrade pip first
-        let _ = tokio::process::Command::new(pip_path.to_str().unwrap())
-            .args(["install", "--upgrade", "pip"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .output()
-            .await;
-
-        // Collect all pip packages to install in one go
-        let packages: Vec<&str> = missing_pip
+        // Collect all packages to install in one go
+        let packages: Vec<&str> = missing_uv
             .iter()
             .filter_map(|d| match &d.kind {
-                DepKind::Pip(pkg) => Some(*pkg),
+                DepKind::Uv(pkg) => Some(*pkg),
                 _ => None,
             })
             .collect();
 
-        let names: Vec<&str> = missing_pip.iter().map(|d| d.name).collect();
-        tracing::info!("   📥 Installing pip packages: {}...", names.join(", "));
+        let names: Vec<&str> = missing_uv.iter().map(|d| d.name).collect();
+        tracing::info!("   📥 Installing via uv: {}...", names.join(", "));
 
-        let mut args = vec!["install"];
+        let mut args = vec!["pip", "install", "--python", VENV_DIR];
         args.extend(&packages);
 
-        let output = tokio::process::Command::new(pip_path.to_str().unwrap())
+        let output = tokio::process::Command::new("uv")
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -208,12 +203,12 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
             }
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            tracing::error!("   ❌ pip install failed: {}", stderr.lines().last().unwrap_or(&stderr));
+            tracing::error!("   ❌ uv pip install failed: {}", stderr.lines().last().unwrap_or(&stderr));
             // Try installing one by one to see which ones fail
-            for dep in &missing_pip {
-                if let DepKind::Pip(pkg) = &dep.kind {
-                    let output = tokio::process::Command::new(pip_path.to_str().unwrap())
-                        .args(["install", pkg])
+            for dep in &missing_uv {
+                if let DepKind::Uv(pkg) = &dep.kind {
+                    let output = tokio::process::Command::new("uv")
+                        .args(["pip", "install", "--python", VENV_DIR, pkg])
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
                         .output()
@@ -236,6 +231,61 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
     }
 }
 
+async fn ensure_uv() -> anyhow::Result<()> {
+    if is_binary_available("uv").await {
+        return Ok(());
+    }
+    tracing::info!("   📥 Installing uv...");
+    let output = tokio::process::Command::new("curl")
+        .args(["-LsSf", "https://astral.sh/uv/install.sh"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await?;
+    if !output.status.success() {
+        anyhow::bail!("Failed to download uv installer");
+    }
+    // pipe the curl output into sh
+    let install = {
+        use tokio::io::AsyncWriteExt;
+        let mut child = tokio::process::Command::new("sh")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(&output.stdout).await?;
+            drop(stdin);
+        }
+        child.wait_with_output().await?
+    };
+    if !install.status.success() {
+        let stderr = String::from_utf8_lossy(&install.stderr);
+        anyhow::bail!("Failed to install uv: {stderr}");
+    }
+    // Verify it's now available
+    if !is_binary_available("uv").await {
+        // uv installs to ~/.local/bin or ~/.cargo/bin — check common locations
+        let home = std::env::var("HOME").unwrap_or_default();
+        for dir in &[
+            format!("{home}/.local/bin"),
+            format!("{home}/.cargo/bin"),
+        ] {
+            let uv_path = PathBuf::from(dir).join("uv");
+            if uv_path.exists() {
+                // Add to PATH for this process
+                let path = std::env::var("PATH").unwrap_or_default();
+                std::env::set_var("PATH", format!("{dir}:{path}"));
+                tracing::info!("   ✅ uv installed at {dir}/uv");
+                return Ok(());
+            }
+        }
+        anyhow::bail!("uv was installed but not found on PATH");
+    }
+    tracing::info!("   ✅ uv installed");
+    Ok(())
+}
+
 async fn ensure_homebrew() -> anyhow::Result<()> {
     if is_binary_available("brew").await {
         return Ok(());
@@ -256,12 +306,9 @@ async fn is_binary_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-async fn is_pip_installed(pip: &Path, package: &str) -> bool {
-    if !pip.exists() {
-        return false;
-    }
-    tokio::process::Command::new(pip)
-        .args(["show", package])
+async fn is_uv_pkg_installed(package: &str, venv: &str) -> bool {
+    tokio::process::Command::new("uv")
+        .args(["pip", "show", "--python", venv, package])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
