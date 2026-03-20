@@ -9,14 +9,16 @@ use std::path::Path;
 pub struct MlxAudioClient {
     pub model: String,
     pub default_voice: String,
+    pub python_path: String,
 }
 
 #[cfg(target_os = "macos")]
 impl MlxAudioClient {
-    pub fn new(model: &str, voice: &str) -> Self {
+    pub fn new(model: &str, voice: &str, python_path: &str) -> Self {
         Self {
             model: model.to_string(),
             default_voice: voice.to_string(),
+            python_path: python_path.to_string(),
         }
     }
 }
@@ -50,7 +52,7 @@ impl Ttser for MlxAudioClient {
             .ok_or_else(|| anyhow::anyhow!("Invalid UTF-8 path: {}", temp_file.display()))?;
 
         let result = crate::util::cmd::run_cmd_status(
-            "python3",
+            &self.python_path,
             &[
                 "-m",
                 "mlx_audio.tts.generate",

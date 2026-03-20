@@ -1,2 +1,5 @@
 /target
 /venv/
+/tasks/
+/uploads/
+/models/

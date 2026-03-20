@@ -37,7 +37,7 @@ impl Service {
         // Transcriber — all free/local providers
         let transcriber: Arc<dyn Transcriber> = match config.transcribe.provider {
             TranscribeProvider::Fasterwhisper => Arc::new(FasterWhisperProcessor::new(
-                &bins.fasterwhisper,
+                &bins.venv_python,
                 &config.transcribe.fasterwhisper.model,
                 config.transcribe.enable_gpu_acceleration,
             )),
@@ -59,7 +59,7 @@ impl Service {
             TranscribeProvider::MlxWhisper => {
                 tracing::warn!("⚠️  MLX Whisper not available on this platform, falling back to faster-whisper");
                 Arc::new(FasterWhisperProcessor::new(
-                    &bins.fasterwhisper,
+                    &bins.venv_python,
                     &config.transcribe.fasterwhisper.model,
                     config.transcribe.enable_gpu_acceleration,
                 ))
@@ -82,6 +82,7 @@ impl Service {
                 Arc::new(crate::provider::local::mlx_audio::MlxAudioClient::new(
                     &config.tts.mlx_audio.model,
                     &config.tts.mlx_audio.voice,
+                    &bins.venv_python,
                 ))
             }
             #[cfg(not(target_os = "macos"))]

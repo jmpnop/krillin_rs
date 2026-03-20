@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::Stdio;
 
 pub struct FasterWhisperProcessor {
-    pub bin_path: String,
+    pub python_path: String,
     pub model: String,
     pub gpu: bool,
 }
@@ -32,9 +32,9 @@ struct FwWord {
 }
 
 impl FasterWhisperProcessor {
-    pub fn new(bin_path: &str, model: &str, gpu: bool) -> Self {
+    pub fn new(python_path: &str, model: &str, gpu: bool) -> Self {
         Self {
-            bin_path: bin_path.to_string(),
+            python_path: python_path.to_string(),
             model: model.to_string(),
             gpu,
         }
@@ -49,32 +49,34 @@ impl Transcriber for FasterWhisperProcessor {
         language: &str,
         work_dir: &Path,
     ) -> anyhow::Result<TranscriptionData> {
+        let audio_str = audio_file
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid UTF-8 path: {}", audio_file.display()))?;
+        let work_str = work_dir
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid UTF-8 path: {}", work_dir.display()))?;
+
         let mut args = vec![
-            "--model_dir".to_string(),
-            "./models/".to_string(),
-            "--model".to_string(),
-            self.model.clone(),
-            "--one_word".to_string(),
-            "2".to_string(),
-            "--output_format".to_string(),
-            "json".to_string(),
-            "--output_dir".to_string(),
-            work_dir.to_str().unwrap().to_string(),
+            "scripts/fasterwhisper_cli.py",
+            audio_str,
+            "--model", &self.model,
+            "--model_dir", "./models/",
+            "--output_dir", work_str,
         ];
 
-        if !language.is_empty() {
-            args.push("--language".to_string());
-            args.push(language.to_string());
-        }
-
+        let compute_type;
         if self.gpu {
-            args.push("--compute_type".to_string());
-            args.push("float16".to_string());
+            compute_type = "float16".to_string();
+            args.extend(["--compute_type", &compute_type]);
         }
 
-        args.push(audio_file.to_str().unwrap().to_string());
+        let lang_owned;
+        if !language.is_empty() {
+            lang_owned = language.to_string();
+            args.extend(["--language", &lang_owned]);
+        }
 
-        let output = tokio::process::Command::new(&self.bin_path)
+        let output = tokio::process::Command::new(&self.python_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -87,11 +89,11 @@ impl Transcriber for FasterWhisperProcessor {
         }
 
         // Parse output JSON
-        let json_file = format!(
-            "{}/{}.json",
-            work_dir.display(),
-            audio_file.file_stem().unwrap().to_str().unwrap()
-        );
+        let stem = audio_file
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("audio");
+        let json_file = format!("{work_str}/{stem}.json");
         let json_content = tokio::fs::read_to_string(&json_file).await?;
         let fw: FwOutput = serde_json::from_str(&json_content)?;
 
