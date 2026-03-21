@@ -53,6 +53,7 @@ pub async fn audio_to_subtitle(
     let mut transcription_results: Vec<(usize, TranscriptionData, f64)> = Vec::with_capacity(num_segments);
 
     let completed = Arc::new(AtomicUsize::new(0));
+    let transcribe_start = std::time::Instant::now();
     let mut join_set = JoinSet::new();
     for i in 0..num_segments {
         let start = split_points[i];
@@ -66,6 +67,7 @@ pub async fn audio_to_subtitle(
         let base_path = param.task_base_path.clone();
         let total = num_segments;
         let completed = completed.clone();
+        let t_start = transcribe_start;
 
         join_set.spawn(async move {
             // Split
@@ -98,7 +100,14 @@ pub async fn audio_to_subtitle(
                             let _ = tokio::fs::write(&json_path, json).await;
                         }
                         let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-                        cli_art::step_transcribe_segment(done - 1, total);
+                        let eta = if done < total {
+                            let elapsed = t_start.elapsed();
+                            let avg = elapsed / done as u32;
+                            Some(avg * (total - done) as u32)
+                        } else {
+                            None
+                        };
+                        cli_art::step_transcribe_segment(done, total, eta);
                         return Ok::<_, anyhow::Error>((i, data, start));
                     }
                     Err(e) => {
@@ -163,6 +172,9 @@ pub async fn audio_to_subtitle(
     }
 
     let mut all_blocks: Vec<SrtBlock> = Vec::new();
+    let translate_start = std::time::Instant::now();
+    let translate_total = transcription_results.iter().filter(|(_, t, _)| !t.text.trim().is_empty()).count();
+    let mut translate_done = 0usize;
 
     for (seg_idx, transcription, time_offset) in &transcription_results {
         if transcription.text.trim().is_empty() {
@@ -190,6 +202,18 @@ pub async fn audio_to_subtitle(
                 })
                 .collect()
         };
+
+        translate_done += 1;
+        if needs_translation {
+            let eta = if translate_done < translate_total {
+                let elapsed = translate_start.elapsed();
+                let avg = elapsed / translate_done as u32;
+                Some(avg * (translate_total - translate_done) as u32)
+            } else {
+                None
+            };
+            cli_art::step_translate_progress(translate_done, translate_total, eta);
+        }
 
         // Generate timestamp-aligned SRT blocks
         let blocks = generate_srt_with_timestamps(&items, &transcription.words, *time_offset);

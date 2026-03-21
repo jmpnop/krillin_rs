@@ -58,12 +58,22 @@ pub async fn srt_to_speech(
 
     let mut audio_paths: Vec<Option<String>> = vec![None; subtitles.len()];
     let total = subtitles.len();
+    let tts_start = std::time::Instant::now();
+    let mut tts_done = 0usize;
     for (i, handle) in handles.into_iter().enumerate() {
         match handle.await? {
             Ok(path) => {
                 audio_paths[i] = Some(path);
-                if (i + 1) % 5 == 0 || i + 1 == total {
-                    cli_art::step_tts_progress(i + 1, total);
+                tts_done += 1;
+                if tts_done % 5 == 0 || tts_done == total {
+                    let eta = if tts_done < total {
+                        let elapsed = tts_start.elapsed();
+                        let avg = elapsed / tts_done as u32;
+                        Some(avg * (total - tts_done) as u32)
+                    } else {
+                        None
+                    };
+                    cli_art::step_tts_progress(tts_done, total, eta);
                 }
             }
             Err(e) => {

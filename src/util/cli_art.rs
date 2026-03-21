@@ -52,9 +52,10 @@ pub fn step_transcribe_start(provider: &str, lang: &str) {
     tracing::info!("   🌍 Language: {lang_display}");
 }
 
-pub fn step_transcribe_segment(i: usize, total: usize) {
-    let bar = progress_bar(i + 1, total, 20);
-    tracing::info!("   📝 Transcribing segment {}/{total} {bar}", i + 1);
+pub fn step_transcribe_segment(done: usize, total: usize, eta: Option<std::time::Duration>) {
+    let bar = progress_bar(done, total, 20);
+    let eta_str = format_eta(eta);
+    tracing::info!("   📝 Transcribed {done}/{total} {bar}{eta_str}");
 }
 
 pub fn step_transcribe_lang_detected(lang: &str) {
@@ -63,6 +64,12 @@ pub fn step_transcribe_lang_detected(lang: &str) {
 
 pub fn step_translate_start(from: &str, to: &str) {
     tracing::info!("   🔄 Translating: {from} → {to}");
+}
+
+pub fn step_translate_progress(done: usize, total: usize, eta: Option<std::time::Duration>) {
+    let bar = progress_bar(done, total, 20);
+    let eta_str = format_eta(eta);
+    tracing::info!("   🔄 Translated {done}/{total} segments {bar}{eta_str}");
 }
 
 pub fn step_transcribe_done(blocks: usize) {
@@ -75,9 +82,10 @@ pub fn step_tts_start(provider: &str, voice: &str) {
     tracing::info!("   🗣️  Voice: {voice}");
 }
 
-pub fn step_tts_progress(done: usize, total: usize) {
+pub fn step_tts_progress(done: usize, total: usize, eta: Option<std::time::Duration>) {
     let bar = progress_bar(done, total, 20);
-    tracing::info!("   🎵 TTS progress: {done}/{total} {bar}");
+    let eta_str = format_eta(eta);
+    tracing::info!("   🎵 TTS progress: {done}/{total} {bar}{eta_str}");
 }
 
 pub fn step_tts_done() {
@@ -142,6 +150,25 @@ pub fn auto_lang_info(detected: &str, target: &str) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Helpers
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+fn format_eta(eta: Option<std::time::Duration>) -> String {
+    match eta {
+        Some(d) => {
+            let secs = d.as_secs();
+            let h = secs / 3600;
+            let m = (secs % 3600) / 60;
+            let s = secs % 60;
+            if h > 0 {
+                format!(" ETA {h}h{m:02}m{s:02}s")
+            } else if m > 0 {
+                format!(" ETA {m}m{s:02}s")
+            } else {
+                format!(" ETA {s}s")
+            }
+        }
+        None => String::new(),
+    }
+}
 
 fn progress_bar(done: usize, total: usize, width: usize) -> String {
     if total == 0 {
