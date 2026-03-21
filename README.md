@@ -9,9 +9,11 @@ Video dubbing and subtitle engine written in Rust. Automatically transcribes, tr
 - **Multi-track audio**: Dubbed audio added as a second track with language metadata (original preserved)
 - **yt-dlp integration**: Paste a YouTube URL, get a dubbed `.mp4` back
 - **Free ASR backends**: faster-whisper, whisper.cpp, WhisperKit, MLX Whisper
-- **Free TTS backends**: Edge TTS, MLX Audio (Kokoro)
-- **Any OpenAI-compatible LLM**: OpenAI, DeepSeek, local `mlx_lm.server`
-- **On-device Apple Silicon**: MLX Whisper + MLX Audio + local LLM = zero cloud dependencies
+- **Voice cloning**: Clone the original speaker's voice from reference audio (Qwen3-TTS, Fish Speech, Chatterbox)
+- **Emotion matching**: LLM-based emotion detection per subtitle, injected as inline tags for TTS providers that support them
+- **5 TTS backends**: Edge TTS, MLX Audio (Kokoro), Qwen3-TTS, Fish Speech S2 Pro, Chatterbox
+- **Any OpenAI-compatible LLM**: OpenAI, DeepSeek, local LM Studio / `mlx_lm.server`
+- **On-device Apple Silicon**: MLX Whisper + Qwen3-TTS + local LLM = zero cloud dependencies
 - **Two binaries**: `vdub` (CLI) and `vdubd` (web server)
 
 ## Requirements
@@ -49,10 +51,17 @@ vdub https://youtube.com/watch?v=VIDEO_ID --no-tts
 # Local file
 vdub local:./my_video.mp4
 
+# Voice-cloning TTS with emotion
+vdub https://youtube.com/watch?v=VIDEO_ID --tts-provider qwen3-tts
+
+# A/B test providers
+vdub https://youtube.com/watch?v=VIDEO_ID --tts-provider fish-speech
+vdub https://youtube.com/watch?v=VIDEO_ID --tts-provider chatterbox
+
 # All options
 vdub https://youtube.com/watch?v=VIDEO_ID \
   --from en --to ru \
-  --voice en-US-GuyNeural \
+  --tts-provider qwen3-tts \
   --no-bilingual \
   --replace-audio \
   --vertical
@@ -64,9 +73,12 @@ vdub https://youtube.com/watch?v=VIDEO_ID \
 |------|-------------|
 | `--from`, `-f` | Source language (auto-detected if omitted) |
 | `--to`, `-t` | Target language (auto-selected EN↔RU if omitted) |
+| `--tts-provider` | Override TTS provider (`edge-tts`, `mlx-audio`, `fish-speech`, `qwen3-tts`, `chatterbox`) |
 | `--no-tts` | Subtitles only, skip dubbing |
 | `--no-embed` | Skip subtitle embedding into video |
-| `--voice` | TTS voice (default: `en-US-AriaNeural` / `af_heart`) |
+| `--no-voice-clone` | Disable voice cloning, use default TTS voice |
+| `--no-emotion` | Disable emotion detection for TTS |
+| `--voice` | TTS voice code |
 | `--no-bilingual` | Target language subtitles only |
 | `--replace-audio` | Replace original audio instead of adding second track |
 | `--vertical` | Also generate vertical (9:16) video |
@@ -91,34 +103,34 @@ Open `http://127.0.0.1:8888` in your browser.
 | WhisperKit | Homebrew | When `transcribe.provider = "whisperkit"` |
 | mlx-whisper | uv (venv) | When `transcribe.provider = "mlx-whisper"` |
 | edge-tts | uv (venv) | When `tts.provider = "edge-tts"` |
-| mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"` |
+| mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"`, `"fish-speech"`, or `"qwen3-tts"` |
+| chatterbox-tts | uv (venv) | When `tts.provider = "chatterbox"` |
 
 ## Apple Silicon (fully local)
 
-Run the entire pipeline on-device with zero cloud dependencies:
+Run the entire pipeline on-device with zero cloud dependencies. Qwen3-TTS provides voice cloning + emotion matching via MLX:
 
 ```bash
-# Install mlx-lm for local LLM server (ASR + TTS are auto-installed)
-uv pip install mlx-lm
-
-# Start local LLM
-mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080
+# Start local LLM (LM Studio recommended, or mlx_lm.server)
+# LM Studio: download Qwen2.5-72B-Instruct-abliterated, start server on port 1234
 ```
 
 Set in `config/config.toml`:
 
 ```toml
 [llm]
-base_url = "http://localhost:8080/v1"
+base_url = "http://localhost:1234/v1"
 api_key = "not-needed"
-model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+model = "qwen2.5-72b-instruct-abliterated"
 
 [transcribe]
 provider = "mlx-whisper"
 
 [tts]
-provider = "mlx-audio"
+provider = "qwen3-tts"
 ```
+
+This runs transcription (MLX Whisper), translation (local LLM), and voice-cloned TTS (Qwen3-TTS) entirely on-device using Metal GPU.
 
 ## API (vdubd)
 
@@ -156,10 +168,13 @@ curl localhost:8888/api/capability/subtitleTask \
 | MLX Whisper | `mlx-whisper` | macOS only, Metal GPU |
 
 ### Text-to-Speech — all free, local
-| Provider | Config value | Notes |
-|----------|-------------|-------|
-| Edge TTS | `edge-tts` | Free, Microsoft voices, default |
-| MLX Audio (Kokoro) | `mlx-audio` | macOS only, 82M params |
+| Provider | Config value | Voice Clone | Emotion | Russian | Notes |
+|----------|-------------|:-----------:|:-------:|:-------:|-------|
+| Edge TTS | `edge-tts` | | | yes | Free Microsoft voices, default |
+| MLX Audio (Kokoro) | `mlx-audio` | | | | macOS, 82M params, fast |
+| Qwen3-TTS | `qwen3-tts` | yes | implicit | tier 1 | macOS MLX native, 1.7B, recommended for dubbing |
+| Fish Speech S2 Pro | `fish-speech` | yes | 15K+ tags | tier 2 | macOS MLX, 6.72 GB 8-bit |
+| Chatterbox | `chatterbox` | yes | exaggeration | yes | MIT license, PyTorch MPS, 23 languages |
 
 ### Translation LLM
 Any OpenAI-compatible API. Point `llm.base_url` at your provider.
@@ -174,12 +189,14 @@ src/
   handler/      # Axum HTTP handlers
   provider/     # ASR, TTS, LLM provider implementations
     openai/     # OpenAI-compatible Chat (for translation LLM)
-    local/      # whisper.cpp, WhisperKit, faster-whisper,
-                # edge-tts, MLX Whisper, MLX Audio
+    local/      # whisper.cpp, WhisperKit, faster-whisper, edge-tts,
+                # MLX Whisper, MLX Audio, Qwen3-TTS, Fish Speech, Chatterbox
   service/      # Pipeline steps (split, transcribe, translate, TTS, embed)
   storage/      # Task store, binary path detection
   types/        # Subtitles, ASS headers, prompts, language maps
-  util/         # ffmpeg/ffprobe wrappers, dependency management, CLI art
+  util/         # ffmpeg/ffprobe wrappers, dependency management, CLI art,
+                # voice extraction, emotion detection
+scripts/        # Python TTS wrappers (qwen3_tts.py, fish_speech_tts.py, chatterbox_tts.py)
 static/         # Embedded web UI
 config/         # Example configuration
 ```

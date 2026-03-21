@@ -24,9 +24,9 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [llm]
-    base_url = ""          # Leave empty for OpenAI. For local MLX: "http://localhost:8080/v1"
-    api_key = ""           # API key. For local MLX: "not-needed"
-    model = "gpt-4o-mini"  # For local MLX: "mlx-community/Qwen2.5-7B-Instruct-4bit"
+    base_url = "http://localhost:1234/v1"  # LM Studio default. For mlx_lm: "http://localhost:8080/v1"
+    api_key = "not-needed"                 # Local LLM — no key required
+    model = "qwen2.5-72b-instruct-abliterated"  # Or any model loaded in LM Studio
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Transcription (ASR) — all free, local providers
@@ -53,11 +53,14 @@
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Text-to-Speech (TTS) — all free, local providers
-# Providers: edge-tts, mlx-audio
+# Providers: edge-tts, mlx-audio, fish-speech, qwen3-tts, chatterbox
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [tts]
-    provider = "edge-tts"   # Choose your TTS provider
+    provider = "edge-tts"        # Choose your TTS provider
+    voice_clone = true           # Clone original speaker's voice (qwen3-tts, fish-speech, chatterbox)
+    voice_ref_duration = 7.0     # Seconds of reference audio for voice cloning (3-30s, 7s sweet spot)
+    enable_emotion = true        # Detect emotions per subtitle and inject into TTS
 
     # Apple Silicon MLX Audio — on-device Kokoro TTS
     # Supports: English, Japanese, Mandarin, Spanish, French
@@ -66,25 +69,60 @@
         model = "mlx-community/Kokoro-82M-bf16"
         voice = "af_heart"   # Default voice
 
+    # Fish Speech S2 Pro — voice cloning + emotion tags
+    # 15K+ inline emotion tags ([excited], [whisper], [angry], etc.)
+    # Russian tier 2, 44.1 kHz, Apple Silicon via MLX
+    # CLI: --tts-provider fish-speech
+    [tts.fish_speech]
+        model = "mlx-community/fish-audio-s2-pro-8bit"  # 6.72 GB 8-bit MLX
+
+    # Qwen3-TTS — voice cloning via ICL (recommended for dubbing)
+    # Zero-shot cloning from 3-8s reference with transcript
+    # Russian tier 1 (native), 24 kHz, Apple Silicon via MLX (native)
+    # Emotion from reference prosody + text understanding (implicit)
+    # Proven for YouTube dubbing (yt-dbl project uses this)
+    # CLI: --tts-provider qwen3-tts
+    [tts.qwen3_tts]
+        model = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+
+    # Chatterbox — MIT licensed, emotion exaggeration control
+    # Single parameter: 0.0 = monotone, 0.5 = natural, 1.0 = dramatic
+    # Voice cloning from 5s reference, 23 languages incl. Russian
+    # PyTorch MPS on Apple Silicon
+    # CLI: --tts-provider chatterbox
+    [tts.chatterbox]
+        exaggeration = 0.5
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Full Local Apple Silicon Setup (zero cloud dependencies)
+# Full Local Setup (zero cloud dependencies)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
-# 1. Install MLX tools:
-#    uv pip install mlx-lm   # ASR + TTS are auto-installed by vdub
+# Option A: LM Studio (recommended — GUI, easy model management)
+#   1. Install LM Studio: https://lmstudio.ai
+#   2. Download a model (e.g. Qwen2.5-72B-Instruct-abliterated Q8_0)
+#   3. Load the model and start the server (Developer tab → Start Server)
+#   4. Config:
+#      [llm]
+#          base_url = "http://localhost:1234/v1"
+#          api_key = "not-needed"
+#          model = "qwen2.5-72b-instruct-abliterated"
 #
-# 2. Start local LLM server:
-#    mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080
+# Option B: mlx_lm.server (lightweight, CLI-only)
+#   1. uv pip install mlx-lm
+#   2. mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8080
+#   3. Config:
+#      [llm]
+#          base_url = "http://localhost:8080/v1"
+#          api_key = "not-needed"
+#          model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 #
-# 3. Use this config:
-#    [llm]
-#        base_url = "http://localhost:8080/v1"
-#        api_key = "not-needed"
-#        model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-#    [transcribe]
-#        provider = "mlx-whisper"
-#    [tts]
-#        provider = "mlx-audio"
+# For full on-device pipeline with voice cloning (ASR + TTS + translation):
+#   [transcribe]
+#       provider = "mlx-whisper"
+#   [tts]
+#       provider = "qwen3-tts"      # Voice cloning + Russian, MLX native
+#       # or "fish-speech"           # Voice cloning + emotion tags, MLX
+#       # or "chatterbox"            # Voice cloning + emotion exaggeration, PyTorch MPS
 #
 # This runs the entire dubbing pipeline on-device using Metal GPU.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

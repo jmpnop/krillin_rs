@@ -86,11 +86,18 @@ pub async fn ensure_dependencies(config: &Config) -> anyhow::Result<Option<PathB
                 check: Check::UvPkg("edge-tts"),
             });
         }
-        TtsProvider::MlxAudio => {
+        TtsProvider::MlxAudio | TtsProvider::FishSpeech | TtsProvider::Qwen3Tts => {
             deps.push(Dep {
                 name: "mlx-audio",
                 kind: DepKind::Uv("mlx-audio"),
                 check: Check::UvPkg("mlx-audio"),
+            });
+        }
+        TtsProvider::Chatterbox => {
+            deps.push(Dep {
+                name: "chatterbox-tts",
+                kind: DepKind::Uv("chatterbox-tts"),
+                check: Check::UvPkg("chatterbox-tts"),
             });
         }
     }

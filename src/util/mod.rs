@@ -3,6 +3,8 @@ pub mod cli_art;
 pub mod cmd;
 pub mod deps;
 pub mod download;
+pub mod emotion;
 pub mod srt;
 pub mod text;
 pub mod video;
+pub mod voice_extract;

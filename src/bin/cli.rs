@@ -46,6 +46,18 @@ struct Cli {
     /// Also generate vertical video
     #[arg(long)]
     vertical: bool,
+
+    /// Override TTS provider (edge-tts, mlx-audio, fish-speech)
+    #[arg(long)]
+    tts_provider: Option<String>,
+
+    /// Disable voice cloning (use default TTS voice)
+    #[arg(long)]
+    no_voice_clone: bool,
+
+    /// Disable emotion detection for TTS
+    #[arg(long)]
+    no_emotion: bool,
 }
 
 #[tokio::main]
@@ -73,7 +85,26 @@ async fn main() -> anyhow::Result<()> {
 
     cli_art::print_skull();
 
-    let config = Config::load()?;
+    let mut config = Config::load()?;
+
+    // CLI overrides for TTS
+    if let Some(ref provider) = cli.tts_provider {
+        config.tts.provider = match provider.as_str() {
+            "edge-tts" => TtsProvider::EdgeTts,
+            "mlx-audio" => TtsProvider::MlxAudio,
+            "fish-speech" => TtsProvider::FishSpeech,
+            "qwen3-tts" => TtsProvider::Qwen3Tts,
+            "chatterbox" => TtsProvider::Chatterbox,
+            other => anyhow::bail!("Unknown TTS provider: {other}. Options: edge-tts, mlx-audio, fish-speech, qwen3-tts, chatterbox"),
+        };
+    }
+    if cli.no_voice_clone {
+        config.tts.voice_clone = false;
+    }
+    if cli.no_emotion {
+        config.tts.enable_emotion = false;
+    }
+
     let venv_bin = vdub::util::deps::ensure_dependencies(&config).await?;
     let bins = BinPaths::detect_with_venv(venv_bin.as_deref());
 
@@ -114,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
     let default_voice = match config.tts.provider {
         TtsProvider::EdgeTts => "en-US-AriaNeural",
         TtsProvider::MlxAudio => "af_heart",
+        TtsProvider::FishSpeech | TtsProvider::Qwen3Tts | TtsProvider::Chatterbox => "default",
     };
     let voice = cli.voice.as_deref().unwrap_or(default_voice);
 
@@ -166,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
     if param.enable_tts {
         cli_art::step_tts_start(config.tts.provider.as_str(), &param.tts_voice_code);
         vdub::service::srt_to_speech::srt_to_speech(
-            &bins, &config, &service.tts_client, &mut param,
+            &bins, &config, &service.tts_client, &service.chat_completer, &mut param,
         ).await?;
     }
 

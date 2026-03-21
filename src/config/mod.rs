@@ -39,6 +39,12 @@ pub enum TtsProvider {
     EdgeTts,
     #[serde(rename = "mlx-audio")]
     MlxAudio,
+    #[serde(rename = "fish-speech")]
+    FishSpeech,
+    #[serde(rename = "qwen3-tts")]
+    Qwen3Tts,
+    #[serde(rename = "chatterbox")]
+    Chatterbox,
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -125,12 +131,70 @@ pub struct TranscribeConfig {
     pub mlx_whisper: MlxWhisperConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TtsConfig {
     #[serde(default)]
     pub provider: TtsProvider,
+    /// Enable voice cloning from original speaker audio
+    #[serde(default = "default_true")]
+    pub voice_clone: bool,
+    /// Duration (seconds) of reference voice to extract for cloning
+    #[serde(default = "default_voice_ref_duration")]
+    pub voice_ref_duration: f64,
+    /// Enable emotion detection and injection into TTS
+    #[serde(default = "default_true")]
+    pub enable_emotion: bool,
     #[serde(default)]
     pub mlx_audio: MlxAudioConfig,
+    #[serde(default)]
+    pub fish_speech: FishSpeechConfig,
+    #[serde(default)]
+    pub qwen3_tts: Qwen3TtsConfig,
+    #[serde(default)]
+    pub chatterbox: ChatterboxConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FishSpeechConfig {
+    #[serde(default = "default_fish_speech_model")]
+    pub model: String,
+}
+
+impl Default for FishSpeechConfig {
+    fn default() -> Self {
+        Self {
+            model: default_fish_speech_model(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Qwen3TtsConfig {
+    #[serde(default = "default_qwen3_tts_model")]
+    pub model: String,
+}
+
+impl Default for Qwen3TtsConfig {
+    fn default() -> Self {
+        Self {
+            model: default_qwen3_tts_model(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatterboxConfig {
+    /// Emotion exaggeration: 0.0 = monotone, 0.5 = natural, 1.0 = dramatic
+    #[serde(default = "default_chatterbox_exaggeration")]
+    pub exaggeration: f64,
+}
+
+impl Default for ChatterboxConfig {
+    fn default() -> Self {
+        Self {
+            exaggeration: default_chatterbox_exaggeration(),
+        }
+    }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -163,6 +227,14 @@ fn default_mlx_audio_model() -> String {
 fn default_mlx_audio_voice() -> String {
     "af_heart".to_string()
 }
+fn default_voice_ref_duration() -> f64 { 7.0 }
+fn default_fish_speech_model() -> String {
+    "mlx-community/fish-audio-s2-pro-8bit".to_string()
+}
+fn default_qwen3_tts_model() -> String {
+    "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16".to_string()
+}
+fn default_chatterbox_exaggeration() -> f64 { 0.5 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Default impls
@@ -239,6 +311,21 @@ impl Default for MlxAudioConfig {
     }
 }
 
+impl Default for TtsConfig {
+    fn default() -> Self {
+        Self {
+            provider: TtsProvider::default(),
+            voice_clone: true,
+            voice_ref_duration: default_voice_ref_duration(),
+            enable_emotion: true,
+            mlx_audio: MlxAudioConfig::default(),
+            fish_speech: FishSpeechConfig::default(),
+            qwen3_tts: Qwen3TtsConfig::default(),
+            chatterbox: ChatterboxConfig::default(),
+        }
+    }
+}
+
 impl TranscribeProvider {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -255,6 +342,9 @@ impl TtsProvider {
         match self {
             Self::EdgeTts => "edge-tts",
             Self::MlxAudio => "mlx-audio",
+            Self::FishSpeech => "fish-speech",
+            Self::Qwen3Tts => "qwen3-tts",
+            Self::Chatterbox => "chatterbox",
         }
     }
 }
@@ -303,9 +393,12 @@ impl Config {
 
         match self.tts.provider {
             TtsProvider::EdgeTts => {}
-            TtsProvider::MlxAudio => {
+            TtsProvider::MlxAudio | TtsProvider::FishSpeech | TtsProvider::Qwen3Tts => {
                 #[cfg(not(target_os = "macos"))]
-                anyhow::bail!("MLX Audio is only supported on macOS (Apple Silicon)");
+                anyhow::bail!("{} is only supported on macOS (Apple Silicon)", self.tts.provider.as_str());
+            }
+            TtsProvider::Chatterbox => {
+                // PyTorch MPS — works on macOS, falls back to CPU elsewhere
             }
         }
 

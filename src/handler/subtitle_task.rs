@@ -268,6 +268,7 @@ async fn run_pipeline(
         &bins,
         &config,
         &tts_client,
+        &chat_completer,
         &mut param,
     )
     .await?;

@@ -30,3 +30,13 @@ Requirements:
 5. Preserve all original text without modification"#;
 
 pub const TRANSLATE_VIDEO_TITLE_AND_DESCRIPTION_PROMPT: &str = "Translate the following video title and description from {origin_lang} to {target_lang}.\n\nTitle: {title}\n\nDescription: {description}\n\nReturn the translated title and description separated by \"####\". Format:\ntranslated_title####translated_description";
+
+pub const EMOTION_DETECTION_PROMPT: &str = r#"Analyze this speech transcript segment and classify the speaker's emotional tone.
+Return ONLY one tag from this list (include the brackets):
+[neutral], [excited], [angry], [sad], [whisper], [laughing], [serious], [sarcastic], [fearful], [tender], [professional broadcast tone]
+
+Context (previous line): {prev}
+Segment to classify: {text}
+Context (next line): {next}
+
+Return ONLY the tag, nothing else."#;

@@ -297,6 +297,28 @@ pub fn lang_display_name(code: &str) -> &str {
     }
 }
 
+/// Default Edge TTS voice for a given language code
+pub fn default_edge_tts_voice(lang: &str) -> &str {
+    match lang {
+        "ru" | "russian" => "ru-RU-DmitryNeural",
+        "en" | "english" => "en-US-AndrewNeural",
+        "zh_cn" | "zh" => "zh-CN-YunxiNeural",
+        "zh_tw" => "zh-TW-YunJheNeural",
+        "ja" | "japanese" => "ja-JP-KeitaNeural",
+        "ko" | "korean" => "ko-KR-InJoonNeural",
+        "fr" | "french" => "fr-FR-HenriNeural",
+        "de" | "german" => "de-DE-ConradNeural",
+        "es" | "spanish" => "es-ES-AlvaroNeural",
+        "pt" | "portuguese" => "pt-BR-AntonioNeural",
+        "it" | "italian" => "it-IT-DiegoNeural",
+        "uk" | "ukrainian" => "uk-UA-OstapNeural",
+        "ar" | "arabic" => "ar-SA-HamedNeural",
+        "hi" | "hindi" => "hi-IN-MadhurNeural",
+        "tr" | "turkish" => "tr-TR-AhmetNeural",
+        _ => "en-US-AndrewNeural",
+    }
+}
+
 /// Determine auto target language based on detected source language.
 /// English ↔ Russian by default. Other languages → English.
 pub fn auto_target_language(detected: &str) -> &str {

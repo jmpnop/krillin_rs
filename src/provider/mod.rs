@@ -28,4 +28,18 @@ pub trait Ttser: Send + Sync {
         voice: &str,
         output_file: &Path,
     ) -> anyhow::Result<()>;
+
+    /// Whether this provider supports voice cloning from reference audio
+    fn supports_voice_cloning(&self) -> bool { false }
+
+    /// Whether this provider supports inline emotion tags (e.g. [excited], [whisper])
+    fn supports_emotion_tags(&self) -> bool { false }
+
+    /// Prepare voice cloning from reference audio. Called once before TTS begins.
+    async fn prepare_voice(
+        &self,
+        _reference_audio: &Path,
+        _reference_transcript: Option<&str>,
+        _work_dir: &Path,
+    ) -> anyhow::Result<()> { Ok(()) }
 }

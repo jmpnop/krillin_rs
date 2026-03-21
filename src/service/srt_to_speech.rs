@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::provider::Ttser;
+use crate::provider::{ChatCompleter, Ttser};
 use crate::storage::BinPaths;
 use crate::types::subtitle::{SrtSentenceWithStrTime, parse_timestamp};
 use crate::types::task::{self, StepParam};
@@ -17,11 +17,22 @@ pub async fn srt_to_speech(
     bins: &BinPaths,
     config: &Config,
     tts_client: &Arc<dyn Ttser>,
+    chat_completer: &Arc<dyn ChatCompleter>,
     param: &mut StepParam,
 ) -> anyhow::Result<()> {
     if !param.enable_tts {
         tracing::info!("   ⏭️  TTS disabled, skipping step 3");
         return Ok(());
+    }
+
+    // Auto-select voice for target language if using default English voice
+    if matches!(config.tts.provider, crate::config::TtsProvider::EdgeTts) {
+        let target = &param.target_language;
+        if !target.is_empty() && target != "en" && param.tts_voice_code.contains("en-US-") {
+            let auto_voice = cli_art::default_edge_tts_voice(target);
+            tracing::info!("   🗣️  Auto-selected voice: {auto_voice} (for {})", cli_art::lang_display_name(target));
+            param.tts_voice_code = auto_voice.to_string();
+        }
     }
 
     // Parse SRT file
@@ -35,6 +46,34 @@ pub async fn srt_to_speech(
 
     tracing::info!("   🎵 Generating TTS for {} entries", subtitles.len());
 
+    // Voice cloning: extract reference voice from original audio
+    if config.tts.voice_clone && tts_client.supports_voice_cloning() {
+        let audio_path = Path::new(&param.audio_file_path);
+        let srt_path = Path::new(&param.tts_source_file_path);
+        let work_dir = Path::new(&param.task_base_path);
+
+        tracing::info!("   🎤 Extracting reference voice for cloning...");
+        let (ref_audio, ref_transcript) = crate::util::voice_extract::extract_reference_voice(
+            &bins.ffmpeg,
+            audio_path,
+            srt_path,
+            work_dir,
+            config.tts.voice_ref_duration,
+        ).await?;
+
+        let transcript = if ref_transcript.is_empty() { None } else { Some(ref_transcript.as_str()) };
+        tts_client.prepare_voice(&ref_audio, transcript, work_dir).await?;
+    }
+
+    // Emotion detection: classify each subtitle's emotion for TTS providers that support it
+    let emotions: Vec<String> = if config.tts.enable_emotion && tts_client.supports_emotion_tags() {
+        tracing::info!("   🎭 Running emotion detection...");
+        let max_parallel = config.app.translate_parallel_num as usize;
+        crate::util::emotion::detect_emotions(chat_completer, &subtitles, max_parallel).await?
+    } else {
+        vec!["[neutral]".to_string(); subtitles.len()]
+    };
+
     // Generate TTS for each subtitle concurrently
     let tts_parallel = config.app.tts_parallel_num as usize;
     let sem = Arc::new(Semaphore::new(tts_parallel));
@@ -46,7 +85,13 @@ pub async fn srt_to_speech(
         let tts = tts_client.clone();
         let sem = sem.clone();
         let voice = param.tts_voice_code.clone();
-        let text = sub.text.clone();
+
+        // Prepend emotion tag when the provider supports it
+        let text = if tts_client.supports_emotion_tags() && emotions[i] != "[neutral]" {
+            format!("{}{}", emotions[i], sub.text)
+        } else {
+            sub.text.clone()
+        };
 
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await?;
@@ -65,7 +110,7 @@ pub async fn srt_to_speech(
             Ok(path) => {
                 audio_paths[i] = Some(path);
                 tts_done += 1;
-                if tts_done % 5 == 0 || tts_done == total {
+                if tts_done.is_multiple_of(5) || tts_done == total {
                     let eta = if tts_done < total {
                         let elapsed = tts_start.elapsed();
                         let avg = elapsed / tts_done as u32;

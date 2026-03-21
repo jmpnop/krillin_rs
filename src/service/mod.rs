@@ -90,6 +90,38 @@ impl Service {
                 tracing::warn!("⚠️  MLX Audio not available on this platform, falling back to Edge TTS");
                 Arc::new(EdgeTtsClient::new(&bins.edge_tts))
             }
+            #[cfg(target_os = "macos")]
+            TtsProvider::FishSpeech => {
+                Arc::new(crate::provider::local::fish_speech::FishSpeechClient::new(
+                    &config.tts.fish_speech.model,
+                    &bins.venv_python,
+                ))
+            }
+            #[cfg(not(target_os = "macos"))]
+            TtsProvider::FishSpeech => {
+                tracing::warn!("⚠️  Fish Speech not available on this platform, falling back to Edge TTS");
+                Arc::new(EdgeTtsClient::new(&bins.edge_tts))
+            }
+            #[cfg(target_os = "macos")]
+            TtsProvider::Qwen3Tts => {
+                let lang = config.app.default_target_language.clone();
+                Arc::new(crate::provider::local::qwen3_tts::Qwen3TtsClient::new(
+                    &config.tts.qwen3_tts.model,
+                    &bins.venv_python,
+                    &lang,
+                ))
+            }
+            #[cfg(not(target_os = "macos"))]
+            TtsProvider::Qwen3Tts => {
+                tracing::warn!("⚠️  Qwen3-TTS not available on this platform, falling back to Edge TTS");
+                Arc::new(EdgeTtsClient::new(&bins.edge_tts))
+            }
+            TtsProvider::Chatterbox => {
+                Arc::new(crate::provider::local::chatterbox::ChatterboxClient::new(
+                    &bins.venv_python,
+                    config.tts.chatterbox.exaggeration,
+                ))
+            }
         };
 
         Self {

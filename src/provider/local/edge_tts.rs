@@ -22,9 +22,10 @@ impl Ttser for EdgeTtsClient {
         voice: &str,
         output_file: &Path,
     ) -> anyhow::Result<()> {
-        // Write text to temp file to avoid CLI escaping issues
+        // Write text to unique temp file to avoid CLI escaping issues
         let temp_dir = output_file.parent().unwrap_or(Path::new("."));
-        let temp_file = temp_dir.join("edge_tts_input.txt");
+        let stem = output_file.file_stem().unwrap_or_default().to_string_lossy();
+        let temp_file = temp_dir.join(format!("edge_tts_input_{stem}.txt"));
         tokio::fs::write(&temp_file, text).await?;
 
         let max_attempts = 3;
