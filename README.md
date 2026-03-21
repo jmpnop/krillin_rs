@@ -103,8 +103,7 @@ Open `http://127.0.0.1:8888` in your browser.
 | WhisperKit | Homebrew | When `transcribe.provider = "whisperkit"` |
 | mlx-whisper | uv (venv) | When `transcribe.provider = "mlx-whisper"` |
 | edge-tts | uv (venv) | When `tts.provider = "edge-tts"` |
-| mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"`, `"fish-speech"`, or `"qwen3-tts"` |
-| chatterbox-tts | uv (venv) | When `tts.provider = "chatterbox"` |
+| mlx-audio | uv (venv) | When `tts.provider = "mlx-audio"`, `"fish-speech"`, `"qwen3-tts"`, or `"chatterbox"` |
 
 ## Apple Silicon (fully local)
 
@@ -174,7 +173,7 @@ curl localhost:8888/api/capability/subtitleTask \
 | MLX Audio (Kokoro) | `mlx-audio` | | | | macOS, 82M params, fast |
 | Qwen3-TTS | `qwen3-tts` | yes | implicit | tier 1 | macOS MLX native, 1.7B, recommended for dubbing |
 | Fish Speech S2 Pro | `fish-speech` | yes | 15K+ tags | tier 2 | macOS MLX, 6.72 GB 8-bit |
-| Chatterbox | `chatterbox` | yes | exaggeration | yes | MIT license, PyTorch MPS, 23 languages |
+| Chatterbox | `chatterbox` | yes | exaggeration | yes | MIT license, macOS MLX, 23 languages |
 
 ### Translation LLM
 Any OpenAI-compatible API. Point `llm.base_url` at your provider.

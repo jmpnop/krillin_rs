@@ -88,9 +88,10 @@
     # Chatterbox — MIT licensed, emotion exaggeration control
     # Single parameter: 0.0 = monotone, 0.5 = natural, 1.0 = dramatic
     # Voice cloning from 5s reference, 23 languages incl. Russian
-    # PyTorch MPS on Apple Silicon
+    # Apple Silicon via MLX (mlx-audio port), also available in 4-bit quantized
     # CLI: --tts-provider chatterbox
     [tts.chatterbox]
+        model = "mlx-community/chatterbox-fp16"  # or chatterbox-4bit, chatterbox-turbo-fp16
         exaggeration = 0.5
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

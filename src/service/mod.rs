@@ -116,11 +116,18 @@ impl Service {
                 tracing::warn!("⚠️  Qwen3-TTS not available on this platform, falling back to Edge TTS");
                 Arc::new(EdgeTtsClient::new(&bins.edge_tts))
             }
+            #[cfg(target_os = "macos")]
             TtsProvider::Chatterbox => {
                 Arc::new(crate::provider::local::chatterbox::ChatterboxClient::new(
+                    &config.tts.chatterbox.model,
                     &bins.venv_python,
                     config.tts.chatterbox.exaggeration,
                 ))
+            }
+            #[cfg(not(target_os = "macos"))]
+            TtsProvider::Chatterbox => {
+                tracing::warn!("⚠️  Chatterbox not available on this platform, falling back to Edge TTS");
+                Arc::new(EdgeTtsClient::new(&bins.edge_tts))
             }
         };
 

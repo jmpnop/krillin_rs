@@ -4,17 +4,21 @@ use std::path::{Path, PathBuf};
 use tokio::sync::RwLock;
 
 /// Chatterbox TTS client — MIT licensed, emotion exaggeration control, 23 languages.
-/// Voice cloning from 5s reference, single exaggeration parameter (0.0=monotone, 1.0=dramatic).
-/// Uses PyTorch MPS on Apple Silicon.
+/// Voice cloning from 5s reference, exaggeration parameter (0.0=monotone, 1.0=dramatic).
+/// Runs on Apple Silicon via mlx-audio (Metal GPU native).
+#[cfg(target_os = "macos")]
 pub struct ChatterboxClient {
+    pub model: String,
     pub python_path: String,
     pub exaggeration: f64,
     reference_audio: RwLock<Option<PathBuf>>,
 }
 
+#[cfg(target_os = "macos")]
 impl ChatterboxClient {
-    pub fn new(python_path: &str, exaggeration: f64) -> Self {
+    pub fn new(model: &str, python_path: &str, exaggeration: f64) -> Self {
         Self {
+            model: model.to_string(),
             python_path: python_path.to_string(),
             exaggeration,
             reference_audio: RwLock::new(None),
@@ -22,6 +26,7 @@ impl ChatterboxClient {
     }
 }
 
+#[cfg(target_os = "macos")]
 #[async_trait]
 impl Ttser for ChatterboxClient {
     async fn text_to_speech(
@@ -47,21 +52,21 @@ impl Ttser for ChatterboxClient {
         let exag_str = format!("{}", self.exaggeration);
 
         let mut args = vec![
-            script,
-            "--text-file", temp_str,
-            "--output", output_str,
-            "--exaggeration", &exag_str,
+            script.to_string(),
+            "--model".to_string(), self.model.clone(),
+            "--text-file".to_string(), temp_str.to_string(),
+            "--output".to_string(), output_str.to_string(),
+            "--exaggeration".to_string(), exag_str,
         ];
 
         let ref_audio = self.reference_audio.read().await;
-        let ref_str;
         if let Some(ref_path) = ref_audio.as_ref() {
-            ref_str = ref_path.to_string_lossy().to_string();
-            args.push("--ref-audio");
-            args.push(&ref_str);
+            args.push("--ref-audio".to_string());
+            args.push(ref_path.to_string_lossy().to_string());
         }
 
-        let result = crate::util::cmd::run_cmd_status(&self.python_path, &args).await;
+        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let result = crate::util::cmd::run_cmd_status(&self.python_path, &arg_refs).await;
 
         let _ = tokio::fs::remove_file(&temp_file).await;
         result

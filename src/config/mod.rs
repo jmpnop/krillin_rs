@@ -184,6 +184,8 @@ impl Default for Qwen3TtsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatterboxConfig {
+    #[serde(default = "default_chatterbox_model")]
+    pub model: String,
     /// Emotion exaggeration: 0.0 = monotone, 0.5 = natural, 1.0 = dramatic
     #[serde(default = "default_chatterbox_exaggeration")]
     pub exaggeration: f64,
@@ -192,6 +194,7 @@ pub struct ChatterboxConfig {
 impl Default for ChatterboxConfig {
     fn default() -> Self {
         Self {
+            model: default_chatterbox_model(),
             exaggeration: default_chatterbox_exaggeration(),
         }
     }
@@ -233,6 +236,9 @@ fn default_fish_speech_model() -> String {
 }
 fn default_qwen3_tts_model() -> String {
     "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16".to_string()
+}
+fn default_chatterbox_model() -> String {
+    "mlx-community/chatterbox-fp16".to_string()
 }
 fn default_chatterbox_exaggeration() -> f64 { 0.5 }
 
@@ -393,12 +399,9 @@ impl Config {
 
         match self.tts.provider {
             TtsProvider::EdgeTts => {}
-            TtsProvider::MlxAudio | TtsProvider::FishSpeech | TtsProvider::Qwen3Tts => {
+            TtsProvider::MlxAudio | TtsProvider::FishSpeech | TtsProvider::Qwen3Tts | TtsProvider::Chatterbox => {
                 #[cfg(not(target_os = "macos"))]
                 anyhow::bail!("{} is only supported on macOS (Apple Silicon)", self.tts.provider.as_str());
-            }
-            TtsProvider::Chatterbox => {
-                // PyTorch MPS — works on macOS, falls back to CPU elsewhere
             }
         }
 
